@@ -14,6 +14,28 @@ pub enum Key {
     Enter,
 }
 
+pub fn key_to_num(key: Key) -> u64{
+    match key{
+        Key::One=>{
+            1
+        },
+        Key::Two=>{
+            2
+        },
+        Key::Three=>{
+            3
+        },
+        Key::Four=>{
+            4
+        },
+        _=>{
+            0
+        }
+    
+    }
+
+}
+
 /// Something you can do to the ATM
 pub enum Action {
     /// Swipe your card at the ATM. The attached value is the hash of the pin
@@ -58,7 +80,67 @@ impl StateMachine for Atm {
     type Transition = Action;
 
     fn next_state(starting_state: &Self::State, t: &Self::Transition) -> Self::State {
-        todo!("Exercise 4")
+        let mut atm = starting_state.clone();
+        match t{
+            Action::SwipeCard(pin_hash) => {
+                atm.expected_pin_hash = Auth::Authenticating(pin_hash.clone());
+                if !matches!(starting_state.expected_pin_hash, Auth::Authenticating(..)){
+                    atm.keystroke_register = vec!();
+                }
+                return atm;
+            },
+            Action::PressKey(key)=>{
+                match key{
+                    Key::Enter =>{
+                        match starting_state.expected_pin_hash{
+                           Auth::Waiting=>{
+                               return starting_state.clone()
+                           },
+                            Auth::Authenticating(pin_hash)=>{
+                                if crate::hash(&starting_state.keystroke_register)==pin_hash{
+                                    atm.keystroke_register = vec!();
+                                    atm.expected_pin_hash = Auth::Authenticated;
+                                    return atm
+                                }else{
+                                    atm.keystroke_register = vec!();
+                                    atm.expected_pin_hash = Auth::Waiting;
+                                    return atm
+                                }
+                            },
+                            Auth::Authenticated=>{
+                                let expected_amount: u64 = starting_state.keystroke_register.clone().into_iter().rev().enumerate().map(|(i, val)| key_to_num(val)*10_u64.pow(i as u32)).sum();
+                                if expected_amount<=starting_state.cash_inside{
+                                    atm.cash_inside-=expected_amount;
+                                    atm.expected_pin_hash = Auth::Waiting;
+                                    atm.keystroke_register = vec!();
+                                    return atm;
+                                } else{
+                                    atm.keystroke_register = vec!();
+                                    atm.expected_pin_hash = Auth::Waiting;
+                                    return atm;
+
+                                }
+
+                            }
+
+
+                        }
+                    },
+                    _=>{
+                        match starting_state.expected_pin_hash{
+                            Auth::Waiting=> {return starting_state.clone()},
+                            _=>{
+                                atm.keystroke_register.push(key.clone());
+                                return atm
+                            }
+
+                        }
+                       
+                    }
+
+                }
+            }
+        }
     }
 }
 
